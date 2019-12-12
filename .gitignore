@@ -1,0 +1,6 @@
+.idea/
+images/
+!images/back.jpg
+*.iml
+target/
+out/
