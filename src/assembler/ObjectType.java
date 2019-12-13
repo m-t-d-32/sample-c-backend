@@ -1,5 +1,7 @@
 package assembler;
 
+import exception.PLDLAssemblingException;
+
 import java.util.*;
 
 public class ObjectType extends VariableType {
@@ -27,6 +29,19 @@ public class ObjectType extends VariableType {
     @Override
     public int hashCode() {
         return Objects.hashCode(fields);
+    }
+
+    @Override
+    public int getLength() {
+        int length = 0;
+        for (Map.Entry<String, String> field: fields){
+            try {
+                length += getPool().getType(field.getValue()).getLength();
+            } catch (PLDLAssemblingException e) {
+                e.printStackTrace();
+            }
+        }
+        return length;
     }
 
     public void addField(String fieldName, String typename){

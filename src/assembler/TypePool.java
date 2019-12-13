@@ -13,10 +13,6 @@ public class TypePool {
         return transformMap;
     }
 
-    public void setTransformMap(Map<VariableType, String> transformMap) {
-        this.transformMap = transformMap;
-    }
-
     private Map<VariableType, String> transformMap = new HashMap<>();
 
     public void addToTypeMap(String typeName, VariableType typeBody){

@@ -35,4 +35,8 @@ public class PointerType extends VariableType {
     public void setPointToType(VariableType pointToType) {
         this.pointToType = pointToType;
     }
+
+    public int getLength() {
+        return 4;
+    }
 }

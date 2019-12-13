@@ -58,4 +58,13 @@ public class ArrayType extends VariableType {
     public int hashCode() {
         return Objects.hash(pointToType, dimensionFactors);
     }
+
+    @Override
+    public int getLength() {
+        int length = pointToType.getLength();
+        for (Integer dimensionFactor : dimensionFactors) {
+            length *= dimensionFactor;
+        }
+        return length;
+    }
 }

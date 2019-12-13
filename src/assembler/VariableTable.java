@@ -18,6 +18,14 @@ public class VariableTable {
 
     private int varfieldCount = 0;
 
+    private int allOffset = 0;
+
+    private TypePool typePool;
+
+    public VariableTable(TypePool pool){
+        this.typePool = pool;
+    }
+
     private List<Map<String, VariableProperty>> nowVars = new ArrayList<>();
 
     public Map<String, VariableProperty> getDefinedVars() {
@@ -36,17 +44,19 @@ public class VariableTable {
         return tempVarName;
     }
 
-    public String addVar(String type, String name) throws PLDLAssemblingException {
+    public VariableProperty addVar(String type, String name) throws PLDLAssemblingException {
         if (nowVars.get(nowVars.size() - 1).containsKey(name)) {
             throw new PLDLAssemblingException("变量" + name + "重复定义！", null);
         }
         String newName = "_" + String.valueOf(nowVars.size()) + "_" + String.valueOf(varfieldCount) + "_" + name;
         VariableProperty variableProperty = new VariableProperty();
         variableProperty.setInnerName(newName);
-        variableProperty.setTypeName(type);
+        variableProperty.setTypeName(typePool.getTransformMap().get(typePool.getType(type)));
+        allOffset -= typePool.getType(type).getLength();
+        variableProperty.setOffset(allOffset);
         nowVars.get(nowVars.size() - 1).put(name, variableProperty);
         definedVars.put(name, variableProperty);
-        return newName;
+        return variableProperty;
     }
 
     public void deepIn() {
@@ -58,7 +68,7 @@ public class VariableTable {
         nowVars.remove(nowVars.size() - 1);
     }
 
-    public boolean checkVar(String name) throws PLDLAssemblingException {
+    public boolean checkVar(String name){
         for (Map<String, VariableProperty> fieldLVars : nowVars) {
             if (fieldLVars.containsKey(name)) {
                 return true;
@@ -67,21 +77,12 @@ public class VariableTable {
         return false;
     }
 
-    public String getVar(String name) throws PLDLAssemblingException {
+    public VariableProperty getVar(String name) throws PLDLAssemblingException {
         for (Map<String, VariableProperty> fieldLVars : nowVars) {
             if (fieldLVars.containsKey(name)) {
-                return fieldLVars.get(name).getInnerName();
+                return fieldLVars.get(name);
             }
         }
         throw new PLDLAssemblingException("变量" + name + "未定义！", null);
-    }
-
-    public String conditionalGetVar(String name) {
-        for (Map<String, VariableProperty> fieldLVars : nowVars) {
-            if (fieldLVars.containsKey(name)) {
-                return fieldLVars.get(name).getInnerName();
-            }
-        }
-        return name;
     }
 }

@@ -24,4 +24,6 @@ public abstract class VariableType {
 
     @Override
     public abstract int hashCode();
+
+    public abstract int getLength();
 }
