@@ -9,12 +9,6 @@ public class TypePool {
 
     private Map<String, VariableType> typeMap = new HashMap<>();
 
-    public Map<VariableType, String> getTransformMap() {
-        return transformMap;
-    }
-
-    private Map<VariableType, String> transformMap = new HashMap<>();
-
     public void addToTypeMap(String typeName, VariableType typeBody){
         typeMap.put(typeName, typeBody);
     }
@@ -36,41 +30,21 @@ public class TypePool {
         return typeMap.get(typeName);
     }
 
-    public boolean checkType(String typeName){
+    public String getTypeName(String typeName) throws PLDLAssemblingException {
         if (!typeMap.containsKey(typeName)){
-            return false;
+            throw new PLDLAssemblingException("类型" + typeName + "没有定义", null);
         }
-        return true;
+        return typeMap.get(typeName).getName();
+    }
+
+    public boolean checkType(String typeName){
+        return typeMap.containsKey(typeName);
     }
 
     public void initType(String typeName, int trueBaseName, int length){
-        BaseType newBaseType = new BaseType(this);
+        BaseType newBaseType = new BaseType(typeName);
         newBaseType.setProcessorType(trueBaseName);
         newBaseType.setLength(length);
         typeMap.put(typeName, newBaseType);
-        transformMap.put(newBaseType, typeName);
-    }
-
-    public String linkArrayType(String newLinkerName, String definedTempName) {
-        ArrayType resultType = new ArrayType(this);
-        String resultName = newLinkerName + "_" + definedTempName;
-        if (Character.isDigit(definedTempName.charAt(0))){
-            resultType.getDimensionFactors().add(Integer.valueOf(definedTempName));
-            resultType.getDimensionFactors().add(Integer.valueOf(newLinkerName));
-        }
-        else {
-            ArrayType oldType = (ArrayType) typeMap.get(definedTempName);
-            resultType.setDimensionFactors(oldType.getDimensionFactors());
-            resultType.getDimensionFactors().add(Integer.valueOf(newLinkerName));
-        }
-        typeMap.put(resultName, resultType);
-        if (!transformMap.containsKey(resultType)) {
-            transformMap.put(resultType, resultName);
-        }
-        return resultName;
-    }
-
-    public void addToTransformMap(ArrayType arrayType, String typestr) {
-        transformMap.put(arrayType, typestr);
     }
 }

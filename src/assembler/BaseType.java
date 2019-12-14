@@ -8,6 +8,10 @@ public class BaseType extends VariableType {
     public static final int TYPE_INT = 0x00;
     public static final int TYPE_FLOAT = 0xff;
 
+    public BaseType(String name) {
+        super(name);
+    }
+
     public int getProcessorType() {
         return processorType;
     }
@@ -26,10 +30,6 @@ public class BaseType extends VariableType {
 
     private int processorType;
     private int length;
-
-    public BaseType(TypePool pool) {
-        super(pool);
-    }
 
     @Override
     public boolean equals(Object o) {

@@ -6,25 +6,9 @@ import java.util.*;
 
 public class VariableTable {
 
-    public int getTempVarCount() {
-        return tempVarCount;
-    }
-
-    public void setTempVarCount(int tempVarCount) {
-        this.tempVarCount = tempVarCount;
-    }
-
-    private int tempVarCount = 0;
-
     private int varfieldCount = 0;
 
     private int allOffset = 0;
-
-    private TypePool typePool;
-
-    public VariableTable(TypePool pool){
-        this.typePool = pool;
-    }
 
     private List<Map<String, VariableProperty>> nowVars = new ArrayList<>();
 
@@ -34,25 +18,15 @@ public class VariableTable {
 
     private Map<String, VariableProperty> definedVars = new HashMap<>();
 
-    public VariableTable() {
-        nowVars.add(new HashMap<>());
-    }
-
-    public String addTempVar() {
-        String tempVarName = "Temp" + String.valueOf(++tempVarCount);
-        nowVars.get(0).put(tempVarName, null);
-        return tempVarName;
-    }
-
-    public VariableProperty addVar(String type, String name) throws PLDLAssemblingException {
+    public VariableProperty addVar(VariableType type, String name) throws PLDLAssemblingException {
         if (nowVars.get(nowVars.size() - 1).containsKey(name)) {
             throw new PLDLAssemblingException("变量" + name + "重复定义！", null);
         }
         String newName = "_" + String.valueOf(nowVars.size()) + "_" + String.valueOf(varfieldCount) + "_" + name;
         VariableProperty variableProperty = new VariableProperty();
         variableProperty.setInnerName(newName);
-        variableProperty.setTypeName(typePool.getTransformMap().get(typePool.getType(type)));
-        allOffset -= typePool.getType(type).getLength();
+        variableProperty.setType(type);
+        allOffset += type.getLength();
         variableProperty.setOffset(allOffset);
         nowVars.get(nowVars.size() - 1).put(name, variableProperty);
         definedVars.put(name, variableProperty);

@@ -6,20 +6,19 @@ import java.util.*;
 
 public class ObjectType extends VariableType {
 
-    public List<Map.Entry<String, String>> getFields() {
+    public ObjectType(String name) {
+        super(name);
+    }
+
+    public List<Map.Entry<String, VariableType>> getFields() {
         return fields;
     }
 
-    public void setFields(List<Map.Entry<String, String>> fields) {
+    public void setFields(List<Map.Entry<String, VariableType>> fields) {
         this.fields = fields;
     }
 
-    List<Map.Entry<String, String>> fields;
-
-    public ObjectType(TypePool pool) {
-        super(pool);
-        fields = new ArrayList<>();
-    }
+    List<Map.Entry<String, VariableType>> fields = new ArrayList<>();
 
     @Override
     public boolean equals(Object o) {
@@ -34,18 +33,14 @@ public class ObjectType extends VariableType {
     @Override
     public int getLength() {
         int length = 0;
-        for (Map.Entry<String, String> field: fields){
-            try {
-                length += getPool().getType(field.getValue()).getLength();
-            } catch (PLDLAssemblingException e) {
-                e.printStackTrace();
-            }
+        for (Map.Entry<String, VariableType> field: fields){
+            length += field.getValue().getLength();
         }
         return length;
     }
 
-    public void addField(String fieldName, String typename){
-        fields.add(new AbstractMap.SimpleEntry<>(fieldName, typename));
+    public void addField(String fieldName, VariableType type){
+        fields.add(new AbstractMap.SimpleEntry<>(fieldName, type));
     }
 
     @Override

@@ -5,9 +5,7 @@ import exception.PLDLAssemblingException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 
 public class NASMAssembler implements Assembler{
 
@@ -18,6 +16,10 @@ public class NASMAssembler implements Assembler{
     private final VariableTable table;
 
     private final TypePool pool;
+
+    private final Map<String, List<Integer> > tempArrayVals = new HashMap<>();
+
+    private final Map<String, Map.Entry<VariableProperty, List<Integer>>> tempLinkVals = new HashMap<>();
 
     public NASMAssembler(InputStream srcInputStream, OutputStream destOutputStream) throws PLDLAssemblingException {
         this.out = new PrintStream(destOutputStream);
@@ -38,7 +40,7 @@ public class NASMAssembler implements Assembler{
                     tuple[3].trim()));
         }
         pool = new TypePool();
-        table = new VariableTable(pool);
+        table = new VariableTable();
     }
 
     private void printHeader(){
@@ -87,29 +89,59 @@ public class NASMAssembler implements Assembler{
                     pool.addDefinedType(tuple4.get(1), tuple4.get(2));
                     break;
                 case "arrayjoin":
-                    String newTypename = pool.linkArrayType(tuple4.get(1), tuple4.get(2));
-                    pool.addDefinedType(tuple4.get(3), newTypename);
+                    List<Integer> now = Character.isDigit(tuple4.get(2).charAt(0)) ? new ArrayList<Integer>(){{
+                        add(Integer.valueOf(tuple4.get(2)));
+                    }} : tempArrayVals.get(tuple4.get(2));
+                    Integer next = Integer.valueOf(tuple4.get(1));
+                    List<Integer> newList = new ArrayList<>(now);
+                    newList.add(0, next);
+                    String newName = tuple4.get(3);
+                    tempArrayVals.put(newName, newList);
                     break;
                 case "define":
-                    String typestr = null;
-                    if (!tuple4.get(1).equals("_")) {
-                        ArrayType arrayType;
-                        if (pool.checkType(tuple4.get(1))) {
-                            arrayType = (ArrayType) pool.getType(tuple4.get(1));
-                        } else {
-                            arrayType = new ArrayType(pool);
-                            arrayType.getDimensionFactors().add(Integer.valueOf(tuple4.get(1)));
+                    if (Character.isDigit(tuple4.get(1).charAt(0))){
+                        //一维数组
+                        ArrayType type = new ArrayType(null);
+                        type.setPointToType(pool.getType(tuple4.get(2)));
+                        type.getDimensionFactors().add(Integer.valueOf(tuple4.get(1)));
+                        type.setName(type.toString());
+                        if (!pool.checkType(type.getName())){
+                            pool.addToTypeMap(type.getName(), type);
                         }
-                        arrayType.setPointToType(pool.getType(tuple4.get(2)));
-                        typestr = arrayType.toString();
-                        if (!pool.checkType(typestr)) {
-                            pool.addToTypeMap(typestr, arrayType);
-                            pool.addToTransformMap(arrayType, typestr);
-                        }
-                    } else {
-                        typestr = tuple4.get(2);
+                        table.addVar(pool.getType(type.getName()), tuple4.get(3));
                     }
-                    table.addVar(typestr, tuple4.get(3));
+                    else if (tuple4.get(1).equals("_")){
+                        //非数组类型
+                        VariableType type = pool.getType(tuple4.get(2));
+                        table.addVar(type, tuple4.get(3));
+                    }
+                    else {
+                        //多维数组
+                        ArrayType type = new ArrayType(null);
+                        type.setPointToType(pool.getType(tuple4.get(2)));
+                        type.setDimensionFactors(tempArrayVals.get(tuple4.get(1)));
+                        type.setName(type.toString());
+                        if (!pool.checkType(type.getName())){
+                            pool.addToTypeMap(type.getName(), type);
+                        }
+                        table.addVar(pool.getType(type.getName()), tuple4.get(3));
+                    }
+                    break;
+                case "link":
+                    //数组下标变量，原始变量，新变量
+                    if (Character.isDigit(tuple4.get(1).charAt(0))){
+                        Map.Entry<VariableProperty, List<Integer>> val = new AbstractMap.SimpleEntry<>(
+                                table.getVar(tuple4.get(2)), new ArrayList<>()
+                        );
+                        val.getValue().add(Integer.valueOf(tuple4.get(1)));
+                        tempLinkVals.put(tuple4.get(3), val);
+                    }
+                    else{
+                        Map.Entry<VariableProperty, List<Integer>> val = new AbstractMap.SimpleEntry<>(
+                                table.getVar(tuple4.get(2)), tempArrayVals.get(tuple4.get(1))
+                        );
+                        tempLinkVals.put(tuple4.get(3), val);
+                    }
                     break;
                 case "in":
                     table.deepIn();
@@ -173,7 +205,7 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformGreater(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val[] = new String[3];
+        String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
         out.println("mov eax," + val[0]);
@@ -183,7 +215,7 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformLess(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val[] = new String[3];
+        String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
         out.println("mov eax," + val[0]);
@@ -193,7 +225,7 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformLE(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val[] = new String[3];
+        String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
         out.println("mov eax," + val[0]);
@@ -203,7 +235,7 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformGE(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val[] = new String[3];
+        String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
         out.println("mov eax," + val[0]);
@@ -213,7 +245,7 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformEqual(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val[] = new String[3];
+        String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
         out.println("mov eax," + val[0]);
@@ -223,51 +255,90 @@ public class NASMAssembler implements Assembler{
     }
 
     private void transformValForBino(Tuple4 tuple4, String[] val) throws PLDLAssemblingException {
-        if (table.checkVar(tuple4.get(1))) {
-            val[0] = "[ebp " + table.getVar(tuple4.get(1)).getOffset() + "]";
-        }  else {
-            val[0] = tuple4.get(1);
+        for (int i = 0; i < 2; ++i) {
+            if (Character.isDigit(tuple4.get(i + 1).charAt(0))){
+                val[i] = tuple4.get(i + 1);
+            }
+            else {
+                val[i] = "[ebp - " + getDefinedVarOffset(tuple4.get(i + 1)) + "]";
+            }
         }
 
-        if (table.checkVar(tuple4.get(2))) {
-            val[1] = "[ebp " + table.getVar(tuple4.get(1)).getOffset() + "]";
-        }  else {
-            val[1] = tuple4.get(2);
-        }
-
-        if (!table.checkVar(tuple4.get(3))) {
+        if (!table.checkVar(tuple4.get(3)) && !tempLinkVals.containsKey(tuple4.get(3))) {
             table.addVar(getUpperType(
-                    table.checkVar(tuple4.get(1)) ? table.getVar(tuple4.get(1)).getTypeName() : getConstType(tuple4.get(1)),
-                    table.checkVar(tuple4.get(2)) ? table.getVar(tuple4.get(2)).getTypeName() : getConstType(tuple4.get(2)))
+                    table.checkVar(tuple4.get(1)) ? table.getVar(tuple4.get(1)).getType() : getConstType(tuple4.get(1)),
+                    table.checkVar(tuple4.get(2)) ? table.getVar(tuple4.get(2)).getType() : getConstType(tuple4.get(2)))
                     , tuple4.get(3)
             );
+            val[2] = "[ebp - " + table.getVar(tuple4.get(3)).getOffset() + "]";
         }
-        val[2] = "[ebp " + table.getVar(tuple4.get(3)).getOffset() + "]";
+        else {
+            val[2] = "[ebp - " + getDefinedVarOffset(tuple4.get(3)) + "]";
+        }
+
     }
 
-    private String getConstType(String s) throws PLDLAssemblingException {
-        return pool.getTransformMap().get(pool.getType("int"));
+    private int getDefinedVarOffset(String var) throws PLDLAssemblingException {
+        if (tempLinkVals.containsKey(var)) {
+            Map.Entry<VariableProperty, List<Integer>> arrayVal = tempLinkVals.get(var);
+            ArrayType type = (ArrayType) arrayVal.getKey().getType();
+            int counter = 0;
+            for (int j = 0; j < type.getDimensionFactors().size(); ++j) {
+                int temp_counter = arrayVal.getValue().get(j);
+                for (int k = j + 1; k < type.getDimensionFactors().size(); ++k) {
+                    temp_counter *= type.getDimensionFactors().get(k);
+                }
+                counter += temp_counter;
+            }
+            counter *= type.getPointToType().getLength();
+            return counter;
+        } else {
+            return table.getVar(var).getOffset();
+        }
     }
 
-    private String getUpperType(String typeName1, String typeName2) throws PLDLAssemblingException {
-        if (pool.getType(typeName1) != pool.getType(typeName2)){
-            //Test for only int
-            throw new PLDLAssemblingException("类型不匹配。", null);
+    private VariableType getConstType(String s) throws PLDLAssemblingException {
+        return pool.getType("int");
+    }
+
+    private VariableType getUpperType(VariableType type1, VariableType type2) throws PLDLAssemblingException {
+        if (type1.equals(type2)){
+            return type1;
         }
-        return typeName1;
+        throw new PLDLAssemblingException(type1.getName() + "与" + type2.getName() + "类型不匹配。", null);
+    }
+
+    private void transformValForUno(Tuple4 tuple4, String[] val) throws PLDLAssemblingException {
+        if (Character.isDigit(tuple4.get(1).charAt(0))){
+            val[0] = tuple4.get(1);
+        }
+        else {
+            val[0] = "[ebp - " + getDefinedVarOffset(tuple4.get(1)) + "]";
+        }
+
+        if (!table.checkVar(tuple4.get(3)) && !tempLinkVals.containsKey(tuple4.get(3))) {
+            table.addVar(
+                    table.checkVar(tuple4.get(1)) ? table.getVar(tuple4.get(1)).getType() : getConstType(tuple4.get(1)),
+                    tuple4.get(3)
+            );
+            val[1] = "[ebp - " + table.getVar(tuple4.get(3)).getOffset() + "]";
+        }
+        else {
+            val[1] = "[ebp - " + getDefinedVarOffset(tuple4.get(3)) + "]";
+        }
     }
 
     private void transformAssign(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val1 = table.checkVar(tuple4.get(1)) ? "[ebp" + table.getVar(tuple4.get(1)).getOffset() + "]" : tuple4.get(1);
-        String val3 = table.checkVar(tuple4.get(3)) ? "[ebp" + table.getVar(tuple4.get(3)).getOffset() + "]" : tuple4.get(3);
-        out.println("mov eax," + val1);
-        out.println("mov " + val3 + ",eax");
+        String []val = new String[2];
+        transformValForUno(tuple4, val);
+        out.println("mov eax," + val[0]);
+        out.println("mov " + val[1] + ",eax");
     }
 
     private void transformCmp(Tuple4 tuple4) throws PLDLAssemblingException {
-        String val1 = table.checkVar(tuple4.get(1)) ? "[ebp" + table.getVar(tuple4.get(1)).getOffset() + "]" : tuple4.get(1);
-        String val3 = table.checkVar(tuple4.get(3)) ? "[ebp" + table.getVar(tuple4.get(3)).getOffset() + "]" : tuple4.get(3);
-        out.println("mov eax," + val1);
-        out.println("cmp eax," + val3);
+        String []val = new String[2];
+        transformValForUno(tuple4, val);
+        out.println("mov eax," + val[0]);
+        out.println("cmp eax," + val[1]);
     }
 }

@@ -6,8 +6,8 @@ public class PointerType extends VariableType {
 
     private VariableType pointToType;
 
-    public PointerType(TypePool pool) {
-        super(pool);
+    public PointerType(String name) {
+        super(name);
     }
 
     @Override

@@ -10,17 +10,9 @@ public class VariableProperty {
         this.innerName = innerName;
     }
 
-    public String getTypeName() {
-        return typeName;
-    }
-
-    public void setTypeName(String typeName) {
-        this.typeName = typeName;
-    }
-
     private String innerName;
 
-    private String typeName;
+    private VariableType type;
 
     private int offset;
 
@@ -30,5 +22,13 @@ public class VariableProperty {
 
     public void setOffset(int offset) {
         this.offset = offset;
+    }
+
+    public VariableType getType() {
+        return type;
+    }
+
+    public void setType(VariableType type) {
+        this.type = type;
     }
 }

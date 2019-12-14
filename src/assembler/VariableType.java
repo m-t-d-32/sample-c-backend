@@ -7,17 +7,21 @@ public abstract class VariableType {
     public static final int POINTER_TYPE = 0x05;
     public static final int ARRAY_TYPE = 0xfe;
 
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    private String name;
+
+    public VariableType(String name){
+        this.name = name;
+    }
+
     public abstract int getType();
-
-    public TypePool getPool() {
-        return pool;
-    }
-
-    private TypePool pool;
-
-    public VariableType(TypePool pool){
-        this.pool = pool;
-    }
 
     @Override
     public abstract boolean equals(Object o);

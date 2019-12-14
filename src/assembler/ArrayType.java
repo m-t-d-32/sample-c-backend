@@ -6,6 +6,10 @@ import java.util.Objects;
 
 public class ArrayType extends VariableType {
 
+    public ArrayType(String name) {
+        super(name);
+    }
+
     public VariableType getPointToType() {
         return pointToType;
     }
@@ -26,10 +30,6 @@ public class ArrayType extends VariableType {
 
     private List<Integer> dimensionFactors = new ArrayList<>();
 
-    public ArrayType(TypePool pool) {
-        super(pool);
-    }
-
     @Override
     public int getType() {
         return VariableType.ARRAY_TYPE;
@@ -38,10 +38,10 @@ public class ArrayType extends VariableType {
     @Override
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
-        for (int i = 0; i < dimensionFactors.size(); ++i){
-            stringBuilder.append(String.valueOf(dimensionFactors.get(i)));
+        for (Integer dimensionFactor : dimensionFactors) {
+            stringBuilder.append(String.valueOf(dimensionFactor));
         }
-        stringBuilder.append(getPool().getTransformMap().get(pointToType));
+        stringBuilder.append(pointToType.getName());
         return stringBuilder.toString();
     }
 
