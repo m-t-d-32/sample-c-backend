@@ -13,15 +13,23 @@ public class NASMAssembler implements Assembler{
 
     private final PrintStream out;
 
-    private final VariableTable table;
+    private VariableTable table;
 
     private final TypePool pool;
 
     private final Map<String, List<Integer> > tempArrayVals = new HashMap<>();
 
-    private final Map<String, Map.Entry<VariableProperty, List<Integer>>> tempLinkVals = new HashMap<>();
+    private final Map<String, List<String> > tempLinkVals = new HashMap<>();
 
-    public NASMAssembler(InputStream srcInputStream, OutputStream destOutputStream) throws PLDLAssemblingException {
+    private final List<String> includes = new ArrayList<>();
+    private final List<String> libs = new ArrayList<>();
+
+    public NASMAssembler(List<String> includes,
+                         List<String> libs,
+                         InputStream srcInputStream,
+                         OutputStream destOutputStream) throws PLDLAssemblingException {
+        this.libs.addAll(libs);
+        this.includes.addAll(includes);
         this.out = new PrintStream(destOutputStream);
         this.srcResultTuples = new ArrayList<>();
         Scanner scanner = new Scanner(srcInputStream);
@@ -44,15 +52,26 @@ public class NASMAssembler implements Assembler{
     }
 
     private void printHeader(){
+        out.println(".686");
+        out.println(".model flat, stdcall");
+        for (String include: includes){
+            out.println("include " + include);
+        }
+        for (String lib: libs){
+            out.println("includelib " + lib);
+        }
+        out.println(".code");
         out.println("start:");
-        out.println("call main");
+        out.println("jmp main");
     }
 
     private void printEnd(){
-        out.println("ret");
+        out.println("invoke ExitProcess, 0");
+        out.println("end start");
     }
 
     public void transformResultTuples() throws PLDLAssemblingException {
+        VariableTable backupTable = null;
         printHeader();
 
         pool.initType("int", BaseType.TYPE_INT, 4);
@@ -77,83 +96,120 @@ public class NASMAssembler implements Assembler{
                 case "assign": transformAssign(tuple4); break;
                 case "jmp": out.println("jmp " + tuple4.get(1)); break;
                 case "jz": out.println("jz " + tuple4.get(1)); break;
-                case "checkvar":
-                    if (!table.checkVar(tuple4.get(1)))
-                        throw new PLDLAssemblingException("变量" + tuple4.get(1) + "没有定义", null);
-                    break;
-                case "checktype":
-                    if (!pool.checkType(tuple4.get(1)))
-                        throw new PLDLAssemblingException("类型" + tuple4.get(1) + "没有定义", null);
-                    break;
-                case "addtype":
-                    pool.addDefinedType(tuple4.get(1), tuple4.get(2));
-                    break;
-                case "arrayjoin":
-                    List<Integer> now = Character.isDigit(tuple4.get(2).charAt(0)) ? new ArrayList<Integer>(){{
-                        add(Integer.valueOf(tuple4.get(2)));
-                    }} : tempArrayVals.get(tuple4.get(2));
-                    Integer next = Integer.valueOf(tuple4.get(1));
-                    List<Integer> newList = new ArrayList<>(now);
-                    newList.add(0, next);
-                    String newName = tuple4.get(3);
-                    tempArrayVals.put(newName, newList);
-                    break;
-                case "define":
-                    if (Character.isDigit(tuple4.get(1).charAt(0))){
-                        //一维数组
-                        ArrayType type = new ArrayType(null);
-                        type.setPointToType(pool.getType(tuple4.get(2)));
-                        type.getDimensionFactors().add(Integer.valueOf(tuple4.get(1)));
-                        type.setName(type.toString());
-                        if (!pool.checkType(type.getName())){
-                            pool.addToTypeMap(type.getName(), type);
-                        }
-                        table.addVar(pool.getType(type.getName()), tuple4.get(3));
-                    }
-                    else if (tuple4.get(1).equals("_")){
-                        //非数组类型
-                        VariableType type = pool.getType(tuple4.get(2));
-                        table.addVar(type, tuple4.get(3));
-                    }
-                    else {
-                        //多维数组
-                        ArrayType type = new ArrayType(null);
-                        type.setPointToType(pool.getType(tuple4.get(2)));
-                        type.setDimensionFactors(tempArrayVals.get(tuple4.get(1)));
-                        type.setName(type.toString());
-                        if (!pool.checkType(type.getName())){
-                            pool.addToTypeMap(type.getName(), type);
-                        }
-                        table.addVar(pool.getType(type.getName()), tuple4.get(3));
-                    }
-                    break;
-                case "link":
-                    //数组下标变量，原始变量，新变量
-                    if (Character.isDigit(tuple4.get(1).charAt(0))){
-                        Map.Entry<VariableProperty, List<Integer>> val = new AbstractMap.SimpleEntry<>(
-                                table.getVar(tuple4.get(2)), new ArrayList<>()
-                        );
-                        val.getValue().add(Integer.valueOf(tuple4.get(1)));
-                        tempLinkVals.put(tuple4.get(3), val);
-                    }
-                    else{
-                        Map.Entry<VariableProperty, List<Integer>> val = new AbstractMap.SimpleEntry<>(
-                                table.getVar(tuple4.get(2)), tempArrayVals.get(tuple4.get(1))
-                        );
-                        tempLinkVals.put(tuple4.get(3), val);
-                    }
-                    break;
-                case "in":
-                    table.deepIn();
-                    break;
-                case "out":
-                    table.shallowOut();
-                    break;
-                default:
-                    System.err.println("error" + tuple4.get(0));
+                case "checkvar": transformCheckVar(tuple4); break;
+                case "checktype": transformCheckType(tuple4); break;
+                case "addtype": transformAddType(tuple4); break;
+                case "arrayjoin": transformArrayJoin(tuple4); break;
+                case "define": transformDefine(tuple4); break;
+                case "link": transformLink(tuple4); break;
+                case "instruct": backupTable = table; table = new VariableTable(); break;
+                case "outstruct": table = backupTable; backupTable = null; break;
+                case "in": table.deepIn(); break;
+                case "out": table.shallowOut(); break;
+                default: System.err.println("error" + tuple4.get(0));
             }
         }
         printEnd();
+    }
+
+    private void transformLink(Tuple4 tuple4) {
+        //数组下标变量，原始变量，新变量
+        String _1 = tuple4.get(1), _2 = tuple4.get(2), _3 = tuple4.get(3);
+        if (tempArrayVals.containsKey(_1)){
+            tempLinkVals.put(_3, new ArrayList<String>(){{
+                add(_2);
+                for (Integer val: tempArrayVals.get(_1)){
+                    add(String.valueOf(val));
+                }
+            }});
+        }
+        else if (tempLinkVals.containsKey(_1)){
+            tempLinkVals.put(_3, new ArrayList<String>(){{
+                if (tempLinkVals.containsKey(_2)) {
+                    addAll(tempLinkVals.get(_2));
+                } else {
+                    add(_2);
+                }
+                addAll(tempLinkVals.get(_1));
+            }});
+        }
+        else if (Character.isDigit(_1.charAt(0))){
+            tempLinkVals.put(_3, new ArrayList<String>(){{
+                add(_2);
+                add(_1);
+            }});
+        }
+        else {
+            //_
+            tempLinkVals.put(_3, new ArrayList<String>(){{
+                add(_2);
+            }});
+        }
+    }
+
+    private void transformDefine(Tuple4 tuple4) throws PLDLAssemblingException {
+        if (Character.isDigit(tuple4.get(1).charAt(0))){
+            //一维数组
+            ArrayType type = new ArrayType(null);
+            type.setPointToType(pool.getType(tuple4.get(2)));
+            type.getDimensionFactors().add(Integer.valueOf(tuple4.get(1)));
+            type.setName(type.toString());
+            if (!pool.checkType(type.getName())){
+                pool.addToTypeMap(type.getName(), type);
+            }
+            table.addVar(pool.getType(type.getName()), tuple4.get(3));
+        }
+        else if (tuple4.get(1).equals("_")){
+            //非数组类型
+            VariableType type = pool.getType(tuple4.get(2));
+            table.addVar(type, tuple4.get(3));
+        }
+        else {
+            //多维数组
+            ArrayType type = new ArrayType(null);
+            type.setPointToType(pool.getType(tuple4.get(2)));
+            type.setDimensionFactors(tempArrayVals.get(tuple4.get(1)));
+            type.setName(type.toString());
+            if (!pool.checkType(type.getName())){
+                pool.addToTypeMap(type.getName(), type);
+            }
+            table.addVar(pool.getType(type.getName()), tuple4.get(3));
+        }
+    }
+
+    private void transformArrayJoin(Tuple4 tuple4) {
+        List<Integer> now = Character.isDigit(tuple4.get(2).charAt(0)) ? new ArrayList<Integer>(){{
+            add(Integer.valueOf(tuple4.get(2)));
+        }} : tempArrayVals.get(tuple4.get(2));
+        Integer next = Integer.valueOf(tuple4.get(1));
+        List<Integer> newList = new ArrayList<>(now);
+        newList.add(0, next);
+        String newName = tuple4.get(3);
+        tempArrayVals.put(newName, newList);
+    }
+
+    private void transformAddType(Tuple4 tuple4) throws PLDLAssemblingException {
+        if (tuple4.get(2).equals("_")){
+            String typename = tuple4.get(1);
+            ObjectType type = new ObjectType(typename);
+            for (Map.Entry<String, VariableProperty> pVar: table.getDefinedVars()){
+                type.addField(pVar.getKey(), pVar.getValue().getType());
+            }
+            pool.addToTypeMap(tuple4.get(1), type);
+        }
+        else {
+            pool.addDefinedType(tuple4.get(1), tuple4.get(2));
+        }
+    }
+
+    private void transformCheckType(Tuple4 tuple4) throws PLDLAssemblingException {
+        if (!pool.checkType(tuple4.get(1)))
+            throw new PLDLAssemblingException("类型" + tuple4.get(1) + "没有定义", null);
+    }
+
+    private void transformCheckVar(Tuple4 tuple4) throws PLDLAssemblingException {
+        if (!table.checkVar(tuple4.get(1)))
+            throw new PLDLAssemblingException("变量" + tuple4.get(1) + "没有定义", null);
     }
 
     private void transformAnd(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -279,22 +335,36 @@ public class NASMAssembler implements Assembler{
     }
 
     private int getDefinedVarOffset(String var) throws PLDLAssemblingException {
-        if (tempLinkVals.containsKey(var)) {
-            Map.Entry<VariableProperty, List<Integer>> arrayVal = tempLinkVals.get(var);
-            ArrayType type = (ArrayType) arrayVal.getKey().getType();
-            int counter = 0;
-            for (int j = 0; j < type.getDimensionFactors().size(); ++j) {
-                int temp_counter = arrayVal.getValue().get(j);
-                for (int k = j + 1; k < type.getDimensionFactors().size(); ++k) {
-                    temp_counter *= type.getDimensionFactors().get(k);
+        List<String> varNameVals = tempLinkVals.get(var);
+
+        int tempOffset = 0, tempIndex = 0;
+        VariableType tempType = table.getVar(varNameVals.get(0)).getType();
+        int offset = table.getVar(varNameVals.get(0)).getOffset();
+        for (int i = 1; i < varNameVals.size(); ++i){
+            if (Character.isDigit(varNameVals.get(i).charAt(0))){
+                int temp_counter = Integer.valueOf(varNameVals.get(i));
+                for (int k = tempIndex + 1; k < ((ArrayType) tempType).getDimensionFactors().size(); ++k) {
+                    temp_counter *= ((ArrayType) tempType).getDimensionFactors().get(k);
                 }
-                counter += temp_counter;
+                tempOffset += temp_counter;
+                ++tempIndex;
             }
-            counter *= type.getPointToType().getLength();
-            return counter;
-        } else {
-            return table.getVar(var).getOffset();
+            else {
+                ObjectType type = (ObjectType) ((ArrayType) tempType).getPointToType();
+                tempOffset *= type.getLength();
+                offset += tempOffset;
+                tempOffset = 0;
+                for (int j = 0; j < type.getFields().size(); ++j){
+                    if (type.getFields().get(j).getKey().equals(varNameVals.get(i))){
+                        tempType = type.getFields().get(j).getValue();
+                        break;
+                    }
+                    offset += type.getFields().get(j).getValue().getLength();
+                }
+                tempIndex = 0;
+            }
         }
+        return offset;
     }
 
     private VariableType getConstType(String s) throws PLDLAssemblingException {

@@ -18,7 +18,7 @@ public class ObjectType extends VariableType {
         this.fields = fields;
     }
 
-    List<Map.Entry<String, VariableType>> fields = new ArrayList<>();
+    private List<Map.Entry<String, VariableType>> fields = new ArrayList<>();
 
     @Override
     public boolean equals(Object o) {

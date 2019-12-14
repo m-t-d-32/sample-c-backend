@@ -10,13 +10,17 @@ public class VariableTable {
 
     private int allOffset = 0;
 
+    public VariableTable(){
+        nowVars.add(new HashMap<>());
+    }
+
     private List<Map<String, VariableProperty>> nowVars = new ArrayList<>();
 
-    public Map<String, VariableProperty> getDefinedVars() {
+    public List<Map.Entry<String, VariableProperty>> getDefinedVars() {
         return definedVars;
     }
 
-    private Map<String, VariableProperty> definedVars = new HashMap<>();
+    private List<Map.Entry<String, VariableProperty>> definedVars = new ArrayList<>();
 
     public VariableProperty addVar(VariableType type, String name) throws PLDLAssemblingException {
         if (nowVars.get(nowVars.size() - 1).containsKey(name)) {
@@ -26,10 +30,10 @@ public class VariableTable {
         VariableProperty variableProperty = new VariableProperty();
         variableProperty.setInnerName(newName);
         variableProperty.setType(type);
-        allOffset += type.getLength();
         variableProperty.setOffset(allOffset);
+        allOffset += type.getLength();
         nowVars.get(nowVars.size() - 1).put(name, variableProperty);
-        definedVars.put(name, variableProperty);
+        definedVars.add(new AbstractMap.SimpleEntry<>(name, variableProperty));
         return variableProperty;
     }
 
