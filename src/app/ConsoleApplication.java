@@ -1,6 +1,6 @@
 package app;
 
-import assembler.NASMAssembler;
+import assembler.MASMAssembler;
 import exception.PLDLAssemblingException;
 
 import java.io.*;
@@ -13,7 +13,7 @@ public class ConsoleApplication {
     public static void executeCmd(String command) throws IOException {
         System.err.println("Execute command : " + command);
         Runtime runtime = Runtime.getRuntime();
-        Process process = runtime.exec("cmd /c start " + command);
+        Process process = runtime.exec(command);
         BufferedReader br = new BufferedReader(new InputStreamReader(process.getErrorStream(), "UTF-8"));
         String line = null;
         StringBuilder build = new StringBuilder();
@@ -35,7 +35,7 @@ public class ConsoleApplication {
             add("asmlib/kernel32.lib");
             add("asmlib/msvcrt.lib");
         }};
-        NASMAssembler assembler = new NASMAssembler(includes, libs, in, out);
+        MASMAssembler assembler = new MASMAssembler(includes, libs, in, out);
         assembler.transformResultTuples();
         executeCmd("D:/masm32/bin/ml.exe /c /coff L.asm");
         executeCmd("D:/masm32/bin/link.exe /subsystem:console /c /coff L.obj");

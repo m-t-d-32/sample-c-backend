@@ -7,7 +7,13 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.*;
 
-public class NASMAssembler implements Assembler{
+public class MASMAssembler implements Assembler{
+    /*
+        拥抱全新的，令人叹为观止的Windows Vista！
+     */
+
+    private final String int_input_fmt_addr = "LD_SCANF";
+    private final String int_output_fmt_addr = "LD_PRINTF";
 
     private final List<Tuple4> srcResultTuples;
 
@@ -24,7 +30,13 @@ public class NASMAssembler implements Assembler{
     private final List<String> includes = new ArrayList<>();
     private final List<String> libs = new ArrayList<>();
 
-    public NASMAssembler(List<String> includes,
+    private static int nextLabel = 0;
+    private static String getNextTempLabel(){
+        /* Make no sense */
+        return "__temp__rep__c32__c50__15421qu_q14c" + String.valueOf(nextLabel ++);
+    }
+
+    public MASMAssembler(List<String> includes,
                          List<String> libs,
                          InputStream srcInputStream,
                          OutputStream destOutputStream) throws PLDLAssemblingException {
@@ -60,6 +72,9 @@ public class NASMAssembler implements Assembler{
         for (String lib: libs){
             out.println("includelib " + lib);
         }
+        out.println(".data");
+        out.println(int_input_fmt_addr + " db \'%d\', 0");
+        out.println(int_output_fmt_addr + " db \'%d\', 13, 10, 0");
         out.println(".code");
         out.println("start:");
         out.println("jmp main");
@@ -79,21 +94,24 @@ public class NASMAssembler implements Assembler{
 
         for (Tuple4 tuple4 : srcResultTuples) {
             switch (tuple4.get(0).toLowerCase()) {
-                case "func": out.println(tuple4.get(3) + ":"); break;
+                case "func": transformFunc(tuple4); break;
                 case "label": out.println(tuple4.get(1) + ":"); break;
-                case "add": transformAdd(tuple4); break;
-                case "sub": transformSub(tuple4); break;
-                case "multi": transformMul(tuple4); break;
-                case "div": transformDiv(tuple4); break;
-                case "and": transformAnd(tuple4); break;
-                case "or": transformOr(tuple4); break;
-                case "cmp": transformCmp(tuple4); break;
-                case "less": transformLess(tuple4); break;
-                case "greater": transformGreater(tuple4); break;
-                case "le": transformLE(tuple4); break;
-                case "ge": transformGE(tuple4); break;
-                case "equ": transformEqual(tuple4); break;
-                case "assign": transformAssign(tuple4); break;
+                case "add": transformAdd(tuple4); break; /* 不支持非int */
+                case "sub": transformSub(tuple4); break; /* 不支持非int */
+                case "mul": transformMul(tuple4); break; /* 不支持非int */
+                case "div": transformDiv(tuple4); break; /* 不支持非int */
+                case "and": transformAnd(tuple4); break; /* 不支持非int */
+                case "or": transformOr(tuple4); break; /* 不支持非int */
+                case "pow": transformPow(tuple4); break; /* 不支持非int */
+                case "cmp": transformCmp(tuple4); break; /* 不支持非int */
+                case "less": transformLess(tuple4); break; /* 不支持非int */
+                case "greater": transformGreater(tuple4); break; /* 不支持非int */
+                case "le": transformLE(tuple4); break; /* 不支持非int */
+                case "ge": transformGE(tuple4); break; /* 不支持非int */
+                case "equ": transformEqual(tuple4); break; /* 不支持非int */
+                case "ne": transformNotEqual(tuple4); break; /* 不支持非int */
+                case "assign": transformAssign(tuple4); break; /* 支持非int */
+                case "not": transformNot(tuple4); break; /* 不支持非int */
                 case "jmp": out.println("jmp " + tuple4.get(1)); break;
                 case "jz": out.println("jz " + tuple4.get(1)); break;
                 case "checkvar": transformCheckVar(tuple4); break;
@@ -106,10 +124,61 @@ public class NASMAssembler implements Assembler{
                 case "outstruct": table = backupTable; backupTable = null; break;
                 case "in": table.deepIn(); break;
                 case "out": table.shallowOut(); break;
+                case "output": transformOutput(tuple4); break;
+                case "input": transformInput(tuple4); break;
+                case "popvar": transformPopVar(tuple4); break;
+                case "ret": transformRet(tuple4); break;
+                case "call": transformCall(tuple4); break;
+                case "pushvar": transformPushVar(tuple4); break;
                 default: System.err.println("error" + tuple4.get(0));
             }
         }
         printEnd();
+    }
+
+    private void transformFunc(Tuple4 tuple4) {
+        out.println(tuple4.get(3) + ":");
+        out.println("push ebp");
+        out.println("mov ebp, esp");
+        out.println("sub esp, 1000");
+    }
+
+    private void transformPopVar(Tuple4 tuple4) {
+    }
+
+    private void transformRet(Tuple4 tuple4) {
+    }
+
+    private void transformCall(Tuple4 tuple4) {
+    }
+
+    private void transformPushVar(Tuple4 tuple4) {
+
+    }
+
+    private void transformOutput(Tuple4 tuple4) throws PLDLAssemblingException {
+        String val;
+        Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(1));
+        if (result.getValue().equals(pool.getType("int"))) {
+            val = "[esp + " + result.getKey() + "]";
+        }
+        else {
+            throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+        }
+        out.println("invoke crt_printf, addr " + int_output_fmt_addr + ", dword ptr" + val);
+    }
+
+    private void transformInput(Tuple4 tuple4) throws PLDLAssemblingException {
+        String val;
+        Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(1));
+        if (result.getValue().equals(pool.getType("int"))) {
+            val = "[esp + " + result.getKey() + "]";
+        }
+        else {
+            throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+        }
+        out.println("lea eax, " + val);
+        out.println("invoke crt_scanf, addr " + int_input_fmt_addr + ", eax");
     }
 
     private void transformLink(Tuple4 tuple4) {
@@ -216,7 +285,7 @@ public class NASMAssembler implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("mov eax," + val[0]);
-        out.println("add eax," + val[1]);
+        out.println("and eax," + val[1]);
         out.println("mov " + val[2] + ",eax");
     }
 
@@ -224,8 +293,20 @@ public class NASMAssembler implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("mov eax," + val[0]);
-        out.println("add eax," + val[1]);
+        out.println("or eax," + val[1]);
         out.println("mov " + val[2] + ",eax");
+    }
+
+    private void transformPow(Tuple4 tuple4) throws PLDLAssemblingException{
+        String[] val = new String[3];
+        transformValForBino(tuple4, val);
+        String labelbegin = getNextTempLabel();
+        out.println("mov eax," + val[0]);
+        out.println("mov ecx," + val[1]);
+        out.println(labelbegin + ":");
+        out.println("imul eax");
+        out.println("loop " + labelbegin);
+        out.println("mov "+ val[2] + " eax");
     }
 
     private void transformAdd(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -256,7 +337,7 @@ public class NASMAssembler implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("mov eax," + val[0]);
-        out.println("imul eax," + val[1]);
+        out.println("idiv eax," + val[1]);
         out.println("mov " + val[2] + ",eax");
     }
 
@@ -310,13 +391,29 @@ public class NASMAssembler implements Assembler{
         out.println("mov " + val[2] + ",eax");
     }
 
+    private void transformNotEqual(Tuple4 tuple4) throws PLDLAssemblingException {
+        String[] val = new String[3];
+        transformValForBino(tuple4, val);
+        out.println("xor eax, eax");
+        out.println("mov eax," + val[0]);
+        out.println("cmp eax," + val[1]);
+        out.println("setne al");
+        out.println("mov " + val[2] + ",eax");
+    }
+
     private void transformValForBino(Tuple4 tuple4, String[] val) throws PLDLAssemblingException {
         for (int i = 0; i < 2; ++i) {
             if (Character.isDigit(tuple4.get(i + 1).charAt(0))){
                 val[i] = tuple4.get(i + 1);
             }
             else {
-                val[i] = "[ebp - " + getDefinedVarOffset(tuple4.get(i + 1)) + "]";
+                Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(i + 1));
+                if (result.getValue().equals(pool.getType("int"))) {
+                    val[i] = "[esp + " + result.getKey() + "]";
+                }
+                else {
+                    throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+                }
             }
         }
 
@@ -326,23 +423,34 @@ public class NASMAssembler implements Assembler{
                     table.checkVar(tuple4.get(2)) ? table.getVar(tuple4.get(2)).getType() : getConstType(tuple4.get(2)))
                     , tuple4.get(3)
             );
-            val[2] = "[ebp - " + table.getVar(tuple4.get(3)).getOffset() + "]";
+            val[2] = "[esp + " + table.getVar(tuple4.get(3)).getOffset() + "]";
         }
         else {
-            val[2] = "[ebp - " + getDefinedVarOffset(tuple4.get(3)) + "]";
+            Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(3));
+            if (result.getValue().equals(pool.getType("int"))) {
+                val[2] = "[esp + " + result.getKey() + "]";
+            }
+            else {
+                throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+            }
         }
 
     }
 
-    private int getDefinedVarOffset(String var) throws PLDLAssemblingException {
+    private Map.Entry<Integer, VariableType> getDefinedVarOffset(String var) throws PLDLAssemblingException {
         List<String> varNameVals = tempLinkVals.get(var);
-
         int tempOffset = 0, tempIndex = 0;
         VariableType tempType = table.getVar(varNameVals.get(0)).getType();
         int offset = table.getVar(varNameVals.get(0)).getOffset();
         for (int i = 1; i < varNameVals.size(); ++i){
             if (Character.isDigit(varNameVals.get(i).charAt(0))){
                 int temp_counter = Integer.valueOf(varNameVals.get(i));
+                if (tempType.getType() != VariableType.ARRAY_TYPE){
+                    throw new PLDLAssemblingException("非数组类型不能使用下标索引，类型: " + tempType.toString(), null);
+                }
+                else if (tempIndex >= ((ArrayType) tempType).getDimensionFactors().size()){
+                    throw new PLDLAssemblingException("数组维度不匹配，维度" + String.valueOf(tempIndex) + "不存在于类型" + tempType.toString(), null);
+                }
                 for (int k = tempIndex + 1; k < ((ArrayType) tempType).getDimensionFactors().size(); ++k) {
                     temp_counter *= ((ArrayType) tempType).getDimensionFactors().get(k);
                 }
@@ -350,21 +458,30 @@ public class NASMAssembler implements Assembler{
                 ++tempIndex;
             }
             else {
-                ObjectType type = (ObjectType) ((ArrayType) tempType).getPointToType();
+                if (tempIndex != ((ArrayType) tempType).getDimensionFactors().size()){
+                    throw new PLDLAssemblingException("数组维度不匹配，维度" + String.valueOf(tempIndex) + "小于数组" + tempType.toString() +
+                            "具有的维度" + String.valueOf(((ArrayType) tempType).getDimensionFactors().size()), null);
+                }
+                ObjectType type = (ObjectType) (tempType.getType() == VariableType.ARRAY_TYPE ? ((ArrayType) tempType).getPointToType() : tempType);
                 tempOffset *= type.getLength();
                 offset += tempOffset;
                 tempOffset = 0;
-                for (int j = 0; j < type.getFields().size(); ++j){
+
+                int j = 0;
+                for (j = 0; j < type.getFields().size(); ++j){
                     if (type.getFields().get(j).getKey().equals(varNameVals.get(i))){
                         tempType = type.getFields().get(j).getValue();
                         break;
                     }
                     offset += type.getFields().get(j).getValue().getLength();
                 }
+                if (j == type.getFields().size()){
+                    throw new PLDLAssemblingException("类型" + type.toString() + "中不存在属性" + varNameVals.get(i), null);
+                }
                 tempIndex = 0;
             }
         }
-        return offset;
+        return new AbstractMap.SimpleEntry<>(offset, tempType);
     }
 
     private VariableType getConstType(String s) throws PLDLAssemblingException {
@@ -383,7 +500,13 @@ public class NASMAssembler implements Assembler{
             val[0] = tuple4.get(1);
         }
         else {
-            val[0] = "[ebp - " + getDefinedVarOffset(tuple4.get(1)) + "]";
+            Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(1));
+            if (result.getValue().equals(pool.getType("int"))) {
+                val[0] = "[esp + " + result.getKey() + "]";
+            }
+            else {
+                throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+            }
         }
 
         if (!table.checkVar(tuple4.get(3)) && !tempLinkVals.containsKey(tuple4.get(3))) {
@@ -391,18 +514,59 @@ public class NASMAssembler implements Assembler{
                     table.checkVar(tuple4.get(1)) ? table.getVar(tuple4.get(1)).getType() : getConstType(tuple4.get(1)),
                     tuple4.get(3)
             );
-            val[1] = "[ebp - " + table.getVar(tuple4.get(3)).getOffset() + "]";
+            val[1] = "[esp + " + table.getVar(tuple4.get(3)).getOffset() + "]";
         }
         else {
-            val[1] = "[ebp - " + getDefinedVarOffset(tuple4.get(3)) + "]";
+            Map.Entry<Integer, VariableType> result = getDefinedVarOffset(tuple4.get(3));
+            if (result.getValue().equals(pool.getType("int"))) {
+                val[1] = "[esp + " + result.getKey() + "]";
+            }
+            else {
+                throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+            }
         }
     }
 
     private void transformAssign(Tuple4 tuple4) throws PLDLAssemblingException {
-        String []val = new String[2];
-        transformValForUno(tuple4, val);
-        out.println("mov eax," + val[0]);
-        out.println("mov " + val[1] + ",eax");
+        Map.Entry<Integer, VariableType> srcOperand, destOperand;
+        if (Character.isDigit(tuple4.get(1).charAt(0))){
+            srcOperand = new AbstractMap.SimpleEntry<>(null, getConstType(tuple4.get(1)));
+        }
+        else {
+            srcOperand = getDefinedVarOffset(tuple4.get(1));
+        }
+
+        if (!table.checkVar(tuple4.get(3)) && !tempLinkVals.containsKey(tuple4.get(3))) {
+            VariableType type = table.checkVar(tuple4.get(1)) ? table.getVar(tuple4.get(1)).getType() : getConstType(tuple4.get(1));
+            table.addVar(type, tuple4.get(3));
+            destOperand = new AbstractMap.SimpleEntry<>(table.getVar(tuple4.get(3)).getOffset(), type);
+        }
+        else {
+            destOperand = getDefinedVarOffset(tuple4.get(3));
+        }
+
+        if (srcOperand.getValue().equals(destOperand.getValue())){
+            int length = srcOperand.getValue().getLength();
+            int opCount = length / 4;
+
+            String labelbegin = getNextTempLabel();
+            out.println("xor eax, eax");
+            out.println("mov ecx, " + String.valueOf(opCount));
+            out.println(labelbegin + ":");
+            if (srcOperand.getKey() == null) {
+                out.println("mov edx, " + tuple4.get(1));
+            }
+            else {
+                out.println("mov edx, [esp + " + srcOperand.getKey() + " + eax]");
+            }
+            out.println("mov [esp + " + destOperand.getKey() + " + eax], edx");
+            out.println("add eax, 4");
+            out.println("loop " + labelbegin);
+        }
+        else {
+            throw new PLDLAssemblingException("类型不匹配，源操作数类型" + srcOperand.getValue().toString() +
+                    ", 目的操作数类型" + destOperand.getValue().toString(), null);
+        }
     }
 
     private void transformCmp(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -410,5 +574,14 @@ public class NASMAssembler implements Assembler{
         transformValForUno(tuple4, val);
         out.println("mov eax," + val[0]);
         out.println("cmp eax," + val[1]);
+    }
+
+    private void transformNot(Tuple4 tuple4) throws PLDLAssemblingException {
+        String []val = new String[2];
+        transformValForUno(tuple4, val);
+        out.println("xor eax, eax");
+        out.println("cmp " + val[0] + ", 0");
+        out.println("sete al");
+        out.println("mov " + val[1] + ",eax");
     }
 }
