@@ -1,4 +1,4 @@
-package assembler;
+package transformer;
 
 public class VariableProperty {
 

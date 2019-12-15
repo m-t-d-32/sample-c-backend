@@ -1,4 +1,4 @@
-package assembler;
+package transformer;
 
 import exception.PLDLAssemblingException;
 
@@ -7,6 +7,14 @@ import java.util.*;
 public class VariableTable {
 
     private int varfieldCount = 0;
+
+    public int getAllOffset() {
+        return allOffset;
+    }
+
+    public void setAllOffset(int allOffset) {
+        this.allOffset = allOffset;
+    }
 
     private int allOffset = 0;
 
