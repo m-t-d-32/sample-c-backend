@@ -32,10 +32,11 @@ public class MASMTransformer implements Assembler{
     private final List<String> libs = new ArrayList<>();
 
     private final Map<String, List<VariableType>> functionParasTable = new HashMap<>();
+    private final Map<String, VariableType> functionReturnsTable = new HashMap<>();
     private List<VariableType> callingParas = new ArrayList<>();
 
     private int callingOffset = 0;
-    private String parsingFunc = null;
+    private String parsingFuncName = null;
 
     private int nextLabel = 0;
     private String getNextTempLabel(){
@@ -94,6 +95,7 @@ public class MASMTransformer implements Assembler{
         VariableTable backupTable = null;
         printHeader();
 
+        pool.initType("void", BaseType.TYPE_VOID, 0);
         pool.initType("int", BaseType.TYPE_INT, 4);
         //pool.initType("float", BaseType.TYPE_FLOAT, 4);
 
@@ -136,30 +138,22 @@ public class MASMTransformer implements Assembler{
                 case "ret": transformRet(tuple4); break;
                 case "call": transformCall(tuple4); break;
                 case "pushvar": transformPushVar(tuple4); break;
-                case "cleanpush": transformCleanPush(tuple4); break;
                 default: System.err.println("error" + tuple4.get(0));
             }
         }
         printEnd();
     }
 
-    private void transformCleanPush(Tuple4 tuple4) {
-        int allOffset = 0;
-        for (VariableType type: functionParasTable.get(tuple4.get(1))){
-            allOffset += type.getLength();
-        }
-        out.println("add esp, " + String.valueOf(allOffset));
-    }
-
-    private void transformFunc(Tuple4 tuple4) {
+    private void transformFunc(Tuple4 tuple4) throws PLDLAssemblingException {
         callingOffset = 0;
-        parsingFunc = tuple4.get(3);
-        out.println(parsingFunc + ":");
+        parsingFuncName = tuple4.get(3);
+        out.println(parsingFuncName + ":");
         out.println("push ebp");
         out.println("mov ebp, esp");
         out.println("sub esp, " + stackSize);
 
-        functionParasTable.put(parsingFunc, new ArrayList<>());
+        functionParasTable.put(parsingFuncName, new ArrayList<>());
+        functionReturnsTable.put(parsingFuncName, pool.getType(tuple4.get(2)));
     }
 
     private void transformPopVar(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -193,13 +187,43 @@ public class MASMTransformer implements Assembler{
         variableProperty.setOffset(stackSize + 8 + callingOffset);
         callingOffset += expectType.getLength();
 
-        functionParasTable.get(parsingFunc).add(expectType);
+        functionParasTable.get(parsingFuncName).add(expectType);
     }
 
-    private void transformRet(Tuple4 tuple4) {
+    private void transformRet(Tuple4 tuple4) throws PLDLAssemblingException {
+        VariableType parsingFuncReturnType = functionReturnsTable.get(parsingFuncName);
+
+        if (!tuple4.get(3).equals("_")) {
+            if (parsingFuncReturnType.equals(pool.getType("void"))) {
+                throw new PLDLAssemblingException("过程调用不能返回值。在过程" + parsingFuncName, null);
+            } else if (Character.isDigit(tuple4.get(3).charAt(0))) {
+                if (!parsingFuncReturnType.equals(getConstType(null))) {
+                    throw new PLDLAssemblingException("返回类型不匹配，在函数" + parsingFuncName, null);
+                } else {
+                    /* 用eax存储返回值 */
+                    out.println("mov eax, " + tuple4.get(3));
+                    /* 用edx表示返回值是立即数 */
+                    out.println("xor edx, edx");
+                }
+            } else {
+                Map.Entry<Integer, VariableType> result = getDefinedVarInfo(tuple4.get(3));
+                if (!result.getValue().equals(parsingFuncReturnType)) {
+                    throw new PLDLAssemblingException("返回类型不匹配，在函数" + parsingFuncName, null);
+                }
+                out.println("mov ebx, " + result.getKey());
+                out.println("mov ecx, " + (result.getValue().getLength() % 4 == 0 ?
+                        result.getValue().getLength() / 4 : result.getValue().getLength() / 4 + 1));
+                /* 用edx表示返回值是变量 */
+                out.println("mov edx, 1");
+            }
+        }
         out.println("add esp, " + stackSize);
         out.println("pop ebp");
-        out.println("ret");
+        int allOffset = 0;
+        for (VariableType type: functionParasTable.get(parsingFuncName)){
+            allOffset += type.getLength();
+        }
+        out.println("ret " + String.valueOf(allOffset));
     }
 
     private void transformCall(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -217,6 +241,37 @@ public class MASMTransformer implements Assembler{
             }
         }
         out.println("call " + tuple4.get(1));
+        if (!functionReturnsTable.get(tuple4.get(1)).equals(pool.getType("void"))) {
+            Map.Entry<Integer, VariableType> result = conditionalGetDefinedVarInfo(tuple4.get(3),
+                    functionReturnsTable.get(tuple4.get(1)));
+            /*不用检查，因为上一步一定是增加了一个相同的变量*/
+            String l2Begin = getNextTempLabel();
+            String l2end = getNextTempLabel();
+            out.println("cmp edx, 0");
+            out.println("jz " + l2Begin);
+            /* 目的 */
+            out.println("mov eax, esp");
+            out.println("add eax, " + result.getKey());
+            /* 源 */
+            out.println("mov edx, esp");
+            out.println("add edx, ebx");
+            int functionStackOffset = 8 + stackSize;
+            for (VariableType type: functionParasTable.get(tuple4.get(1))){
+                functionStackOffset += type.getLength();
+            }
+            out.println("sub edx, " + String.valueOf(functionStackOffset));
+            String l1loop = getNextTempLabel();
+            out.println(l1loop + ":");
+            out.println("mov ebx, dword ptr[edx]");
+            out.println("mov dword ptr[eax], ebx");
+            out.println("add eax, 4");
+            out.println("add edx, 4");
+            out.println("loop " + l1loop);
+            out.println("jmp " + l2end);
+            out.println(l2Begin + ":");
+            out.println("mov dword ptr[esp + " + String.valueOf(result.getKey()) + "], eax");
+            out.println(l2end + ":");
+        }
         callingParas.clear();
     }
 
@@ -227,7 +282,8 @@ public class MASMTransformer implements Assembler{
         }
         else {
             Map.Entry<Integer, VariableType> tempVar = getDefinedVarInfo(tuple4.get(3));
-            int count = tempVar.getValue().getLength() / 4;
+            int count = tempVar.getValue().getLength() % 4 == 0?
+                    tempVar.getValue().getLength() / 4: tempVar.getValue().getLength() / 4 + 1;
             String labelbegin = getNextTempLabel();
             out.println("mov eax, ebp");
             out.println("sub eax, " + stackSize);
@@ -384,12 +440,13 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         String labelbegin = getNextTempLabel();
-        out.println("mov eax," + val[0]);
+        out.println("mov eax, 1");
+        out.println("mov ebx," + val[0]);
         out.println("mov ecx," + val[1]);
         out.println(labelbegin + ":");
-        out.println("imul eax");
+        out.println("imul ebx");
         out.println("loop " + labelbegin);
-        out.println("mov "+ val[2] + " eax");
+        out.println("mov "+ val[2] + ", eax");
     }
 
     private void transformAdd(Tuple4 tuple4) throws PLDLAssemblingException {
@@ -419,8 +476,10 @@ public class MASMTransformer implements Assembler{
     private void transformDiv(Tuple4 tuple4) throws PLDLAssemblingException {
         String[] val = new String[3];
         transformValForBino(tuple4, val);
+        out.println("xor edx, edx");
         out.println("mov eax," + val[0]);
-        out.println("idiv eax," + val[1]);
+        out.println("mov ecx," + val[1]);
+        out.println("idiv ecx");
         out.println("mov " + val[2] + ",eax");
     }
 
@@ -428,8 +487,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("setg al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -438,8 +497,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("setl al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -448,8 +507,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("setle al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -458,8 +517,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("setge al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -468,8 +527,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("sete al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -478,8 +537,8 @@ public class MASMTransformer implements Assembler{
         String[] val = new String[3];
         transformValForBino(tuple4, val);
         out.println("xor eax, eax");
-        out.println("mov eax," + val[0]);
-        out.println("cmp eax," + val[1]);
+        out.println("mov ebx," + val[0]);
+        out.println("cmp ebx," + val[1]);
         out.println("setne al");
         out.println("mov " + val[2] + ",eax");
     }
@@ -549,6 +608,11 @@ public class MASMTransformer implements Assembler{
                     tempIndex = 0;
                 }
             }
+            if (tempType.getType() == VariableType.ARRAY_TYPE){
+                tempType = ((ArrayType) tempType).getPointToType();
+                tempOffset *= tempType.getLength();
+                offset += tempOffset;
+            }
             return new AbstractMap.SimpleEntry<>(offset, tempType);
         }
         /* Won't reach */
@@ -590,12 +654,16 @@ public class MASMTransformer implements Assembler{
             }
         }
 
-        Map.Entry<Integer, VariableType> result = conditionalGetDefinedVarInfo(tuple4.get(3), getConstType(null));
-        if (result.getValue().equals(pool.getType("int"))) {
-            val[1] = "dword ptr [esp + " + result.getKey() + "]";
+        if (Character.isDigit(tuple4.get(3).charAt(0))){
+            val[1] = tuple4.get(3);
         }
         else {
-            throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+            Map.Entry<Integer, VariableType> result = conditionalGetDefinedVarInfo(tuple4.get(3), getConstType(null));
+            if (result.getValue().equals(pool.getType("int"))) {
+                val[1] = "dword ptr [esp + " + result.getKey() + "]";
+            } else {
+                throw new PLDLAssemblingException("该类型" + result.getValue().toString() + "不支持的操作", null);
+            }
         }
     }
 
@@ -612,7 +680,7 @@ public class MASMTransformer implements Assembler{
 
         if (srcOperand.getValue().equals(destOperand.getValue())){
             int length = srcOperand.getValue().getLength();
-            int opCount = length / 4;
+            int opCount = length % 4 == 0 ? length / 4 : length / 4 + 1;
 
             String labelbegin = getNextTempLabel();
             out.println("xor eax, eax");

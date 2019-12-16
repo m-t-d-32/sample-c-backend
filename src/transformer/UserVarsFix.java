@@ -11,6 +11,7 @@ public class UserVarsFix {
     private static final List<String> notInDefine = new ArrayList<String>(){{
         add("int");
         add("main");
+        add("void");
     }};
 
     public static void transformToUserVars(List<Tuple4> tuple4s){

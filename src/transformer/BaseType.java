@@ -7,6 +7,7 @@ public class BaseType extends VariableType {
     /* 只是表示当今处理器能够处理的数据类型，不表示大小 */
     public static final int TYPE_INT = 0x00;
     public static final int TYPE_FLOAT = 0xff;
+    public static final int TYPE_VOID = 0x01;
 
     public BaseType(String name) {
         super(name);
