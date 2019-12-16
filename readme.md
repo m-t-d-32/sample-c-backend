@@ -1,6 +1,6 @@
 # LYRON-C后端
 
-这是为类C的编程语言开发的编译器后端程序的一部分。编译器后端用于将中间代码转换成目标代码。对于本项目，中间代码是依赖[LYRON编译器框架](https://github.com/llyronx/LYRON)以及文法[c.xml](https://github.com/LLyronx/LYRON/blob/master/sample-xml/c.xml)生成的四元式，目标代码是Windows平台上的可执行程序（EXE）。本程序将中间代码生成汇编代码，然后依赖MASM32（汇编器和链接器）将汇编代码生成Windows平台上可执行程序。
+这是为类C的编程语言开发的编译器后端程序的一部分。编译器后端用于将中间代码转换成目标代码。对于本项目，中间代码是依赖[LYRON编译器框架](https://github.com/llyronx/LYRON)以及文法[c.xml](https://github.com/LLyronx/LYRON/blob/master/sample/c/xml/c.xml)生成的四元式，目标代码是Windows平台上的可执行程序（EXE）。本程序将中间代码生成汇编代码，然后依赖MASM32（汇编器和链接器）将汇编代码生成Windows平台上可执行程序。
 
 ### 编译和运行
 
@@ -54,4 +54,3 @@
 - [x] 使用关键字`print`和`input`进行输入输出，一次输出一个
 - [ ] 预处理器`include`
 - [ ] 预处理器`define`
-

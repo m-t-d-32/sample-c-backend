@@ -52,7 +52,7 @@ public class ConsoleApplication {
         FileInputStream in = new FileInputStream(new File(path4Tuples));
         FileOutputStream out = new FileOutputStream(new File(new File(path4Tuples + ".asm").getPath()));
 
-        String finalPathMasm31 = pathMasm32;
+        final String finalPathMasm31 = pathMasm32;
         List<String> includes = new ArrayList<String>(){{
             add(new File(finalPathMasm31, "include/kernel32.inc").getPath());
             add(new File(finalPathMasm31, "include/msvcrt.inc").getPath());
